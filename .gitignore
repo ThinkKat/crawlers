@@ -1,0 +1,12 @@
+.DS_Store
+
+.venv
+__pycache__
+
+assets/
+
+.env
+
+*.db
+*.rdb
+*.sql

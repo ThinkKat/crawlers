@@ -1,0 +1,104 @@
+import os
+import logging
+import sqlite3
+import uuid
+from urllib.parse import urljoin 
+
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+
+class Parser:
+    def __init__(self):
+        load_dotenv()
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+        )
+        self.logger = logging.getLogger("parser")
+        self.conn = sqlite3.connect(os.getenv("CRAWLERS_DB_URL"))
+        
+    def extract_links(self, html:str, base_url:str) -> list[str]:
+        soup = BeautifulSoup(html, "lxml")
+        base_url = base_url.rstrip("/")
+        
+        # 모든 a 태그 parsing
+        atags = soup.find_all("a")
+        hrefs = set([a.attrs["href"] for a in atags if "href" in a.attrs])
+        urls = [] 
+        
+        for href in hrefs:
+            urls.append(urljoin(base_url, href))
+                
+        return urls
+        
+    def load_urls_to_db(self, base_url_id: str, urls: list[str]):
+        url_info = [(str(uuid.uuid1()), url, ) for url in urls]
+        
+        cur = self.conn.cursor()
+        
+        # url 중복 제거 로직
+        cur.executemany(
+            """
+                INSERT INTO url_info (id, url) VALUES (?, ?) ON CONFLICT (url) DO NOTHING;
+            """,
+            url_info
+        )
+        
+        # parsing을 마친 url을 parsed로 변경
+        cur.execute(
+            """
+                UPDATE url_info SET status="parsed" WHERE id=?
+            """, 
+            (base_url_id, )
+        )     
+        cur.close()
+        self.conn.commit()
+        
+        self.logger.info(f"Insert the {len(url_info)} of urls into db")
+            
+    
+if __name__ == "__main__":
+    load_dotenv()
+    
+    import time
+    import redis
+    r = redis.Redis(host = 'localhost', port = 6379, db = 0)
+    parser = Parser()
+    
+    try_count = 0
+    while True:
+        item = r.lpop(os.getenv("REDIS_FETCHED_QUEUE"))
+        
+        if item:
+            try_count = 0
+            example_url_save_path = item.decode().split("|")
+        else:
+            print("No item in fetched queue")
+            time.sleep(10)
+            
+            try_count += 1
+            if try_count > 10: 
+                print("Exceed the try counts")
+                exit(1)
+            continue
+        
+        
+        url_id = example_url_save_path[0]
+        url = example_url_save_path[1]
+        html_path = example_url_save_path[2]
+        
+        with open(html_path, "r") as f:
+            html = f.read()
+        try:
+            urls = parser.extract_links(html, url)
+            parser.load_urls_to_db(url_id, urls)
+            print(f"Push extracted-url {url}")
+        except KeyboardInterrupt:
+            exit(1)
+        except:
+            import traceback
+            traceback.print_exc()
+            r.rpush(os.getenv("REDIS_FETCHED_QUEUE"), item)
+            print(f"Re-push failed item {item}")
+        
+        
