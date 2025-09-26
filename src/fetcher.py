@@ -18,7 +18,7 @@ class Fetcher:
         
         load_dotenv()
         self.conn = sqlite3.connect(os.getenv("CRAWLERS_DB_URL"))
-        self.r = redis.Redis(host = "localhost", port = os.environ["REDIS_PORT"], db = 0)
+        self.r = redis.Redis(host = os.getenv("REDIS_HOST"), port = os.getenv("REDIS_PORT"), db = 0)
     
     def fetch(self, 
               url_id: str, 
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     load_dotenv()
     
     import time
-    r = redis.Redis(host = "localhost", port = os.environ["REDIS_PORT"], db = 0)
+    r = redis.Redis(host = os.getenv("REDIS_HOST"), port = os.getenv("REDIS_PORT"), db = 0)
     
     try_count = 0
     while True:
