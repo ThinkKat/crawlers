@@ -17,15 +17,33 @@ class Parser:
         self.logger = logging.getLogger("parser")
         self.conn = sqlite3.connect(os.getenv("CRAWLERS_DB_URL"))
         
-    def extract_links(self, html:str, base_url:str) -> list[str]:
+    def extract_links(self, html:str, base_url:str, parse_meta: dict | None = {"skip": False}) -> list[str]:
         soup = BeautifulSoup(html, "lxml")
         base_url = base_url.rstrip("/")
         
         # 모든 a 태그 parsing
-        atags = soup.find_all("a")
-        hrefs = set([a.attrs["href"] for a in atags if "href" in a.attrs])
-        urls = [] 
+        if parse_meta:
+            
+            # 링크 추출 하지 않음.
+            if "skip" in parse_meta and parse_meta["skip"]:
+                return []
+            
+            if "selector" in parse_meta and parse_meta["selector"]:
+                if "class" in parse_meta["selector"] and parse_meta["selector"]["class"]:
+                    elems = soup.find_all(class_ = parse_meta["selector"]["class"])
+                    
+                    atags = []
+                    for elem in elems:
+                        atags.extend(elem.find_all("a"))
+                    
+                    hrefs = set([a.attrs["href"] for a in atags if a and "href" in a.attrs])
+        else:
+            # 없으면 전부 수집
+            atags = soup.find_all("a")
+            hrefs = set([a.attrs["href"] for a in atags if "href" in a.attrs])
         
+        # Url 수집
+        urls = [] 
         for href in hrefs:
             urls.append(urljoin(base_url, href))
                 
@@ -37,6 +55,8 @@ class Parser:
         cur = self.conn.cursor()
         
         # url 중복 제거 로직
+        # 중복 제거 로직이 단순히 url만으로는 안될 것 같다. canonical urls가 있어서 이 urls을 처리하는 방법이 필요함.
+        # e.g. https://example.com == https://www.example.com == https://WWW.EXAMPLE.COM
         cur.executemany(
             """
                 INSERT INTO url_info (id, url) VALUES (?, ?) ON CONFLICT (url) DO NOTHING;
@@ -74,7 +94,7 @@ if __name__ == "__main__":
             example_url_save_path = item.decode().split("|")
         else:
             print("No item in fetched queue")
-            time.sleep(10)
+            time.sleep(int(os.getenv("INTERVAL", 5)))
             
             try_count += 1
             if try_count > 10: 
@@ -82,15 +102,26 @@ if __name__ == "__main__":
                 exit(1)
             continue
         
-        
         url_id = example_url_save_path[0]
         url = example_url_save_path[1]
         html_path = example_url_save_path[2]
         
+        with open("parse_meta.json", "r") as f:
+            import json
+            parse_met_file = json.loads(f.read())
+        
+        import re
+        for key in parse_met_file.keys():
+            block = re.match(key, url)
+            if block:
+                parse_meta = parse_met_file[key]
+                print(parse_meta)
+                break # 찾으면 바로 break
+            
         with open(html_path, "r") as f:
             html = f.read()
         try:
-            urls = parser.extract_links(html, url)
+            urls = parser.extract_links(html, url, parse_meta)
             parser.load_urls_to_db(url_id, urls)
             print(f"Push extracted-url {url}")
         except KeyboardInterrupt:
