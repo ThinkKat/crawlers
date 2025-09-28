@@ -119,7 +119,7 @@ if __name__ == "__main__":
             example_url_info = item.decode().split("|")
         else:
             print("No item in frontier queue")
-            time.sleep(10)
+            time.sleep(int(os.getenv("INTERVAL", 5)))
             
             try_count += 1
             if try_count > 10: 

@@ -20,6 +20,7 @@ class Frontier:
     def load_urls_to_redis(self, maximum : int = 100):
         """ Load urls
         """
+        
         # DB에서 pending 상태의 url을 가져옴. 
         cur = self.conn.cursor()
         res = cur.execute("SELECT id, url, status FROM url_info WHERE status = ? LIMIT ?", ("pending", maximum))
@@ -44,9 +45,9 @@ class Frontier:
     
 if __name__ == "__main__":
     import time
-    
+    load_dotenv()
     frontier = Frontier()
     while True:
         frontier.load_urls_to_redis()
-        time.sleep(10)
+        time.sleep(int(os.getenv("INTERVAL", 5)))
         
