@@ -20,30 +20,27 @@ class Parser:
     def extract_links(self, html:str, base_url:str, parse_meta: dict = {"skip": False}) -> list[str]:
         soup = BeautifulSoup(html, "lxml")
         
-        # 링크 추출 하지 않음.
-        if "skip" in parse_meta:
-            if parse_meta["skip"]:
-                return []
+        if "skip" in parse_meta and parse_meta["skip"]: # 링크 추출 하지 않음.
+            return []
+        else:
+            if "selector" in parse_meta and parse_meta["selector"]: # Selector filtering
+                if "class" in parse_meta["selector"] and parse_meta["selector"]["class"]:
+                    elems = soup.find_all(class_ = parse_meta["selector"]["class"])
+                    
+                    atags = []
+                    for elem in elems:
+                        atags.extend(elem.find_all("a"))
+                    
+                    hrefs = set([a.attrs["href"] for a in atags if a and "href" in a.attrs])
             else:
                 # 없으면 전부 수집
                 atags = soup.find_all("a")
                 hrefs = set([a.attrs["href"] for a in atags if "href" in a.attrs])
-        
-        if "selector" in parse_meta and parse_meta["selector"]:
-            if "class" in parse_meta["selector"] and parse_meta["selector"]["class"]:
-                elems = soup.find_all(class_ = parse_meta["selector"]["class"])
-                
-                atags = []
-                for elem in elems:
-                    atags.extend(elem.find_all("a"))
-                
-                hrefs = set([a.attrs["href"] for a in atags if a and "href" in a.attrs])
-            
-        
+                    
         # Url 수집
         urls = [] 
         for href in hrefs:
-            urls.append(urljoin(base_url, href))
+            urls.append(urljoin(base_url, href).lower())
                 
         return urls
         
