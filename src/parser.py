@@ -17,30 +17,28 @@ class Parser:
         self.logger = logging.getLogger("parser")
         self.conn = sqlite3.connect(os.getenv("CRAWLERS_DB_URL"))
         
-    def extract_links(self, html:str, base_url:str, parse_meta: dict | None = {"skip": False}) -> list[str]:
+    def extract_links(self, html:str, base_url:str, parse_meta: dict = {"skip": False}) -> list[str]:
         soup = BeautifulSoup(html, "lxml")
-        base_url = base_url.rstrip("/")
         
-        # 모든 a 태그 parsing
-        if parse_meta:
-            
-            # 링크 추출 하지 않음.
-            if "skip" in parse_meta and parse_meta["skip"]:
+        # 링크 추출 하지 않음.
+        if "skip" in parse_meta:
+            if parse_meta["skip"]:
                 return []
+            else:
+                # 없으면 전부 수집
+                atags = soup.find_all("a")
+                hrefs = set([a.attrs["href"] for a in atags if "href" in a.attrs])
+        
+        if "selector" in parse_meta and parse_meta["selector"]:
+            if "class" in parse_meta["selector"] and parse_meta["selector"]["class"]:
+                elems = soup.find_all(class_ = parse_meta["selector"]["class"])
+                
+                atags = []
+                for elem in elems:
+                    atags.extend(elem.find_all("a"))
+                
+                hrefs = set([a.attrs["href"] for a in atags if a and "href" in a.attrs])
             
-            if "selector" in parse_meta and parse_meta["selector"]:
-                if "class" in parse_meta["selector"] and parse_meta["selector"]["class"]:
-                    elems = soup.find_all(class_ = parse_meta["selector"]["class"])
-                    
-                    atags = []
-                    for elem in elems:
-                        atags.extend(elem.find_all("a"))
-                    
-                    hrefs = set([a.attrs["href"] for a in atags if a and "href" in a.attrs])
-        else:
-            # 없으면 전부 수집
-            atags = soup.find_all("a")
-            hrefs = set([a.attrs["href"] for a in atags if "href" in a.attrs])
         
         # Url 수집
         urls = [] 
@@ -81,8 +79,13 @@ if __name__ == "__main__":
     load_dotenv()
     
     import time
+    import json
+    
     import redis
     r = redis.Redis(host = os.getenv("REDIS_HOST"), port = os.getenv("REDIS_PORT"), db = 0)
+    
+    with open(os.getenv("PARSE_META_FILE"), "r") as f:
+        parse_meta_file = json.loads(f.read())
     parser = Parser()
     
     try_count = 0
@@ -106,17 +109,15 @@ if __name__ == "__main__":
         url = example_url_save_path[1]
         html_path = example_url_save_path[2]
         
-        with open("parse_meta.json", "r") as f:
-            import json
-            parse_met_file = json.loads(f.read())
-        
+        # --------------------------------------
         import re
-        for key in parse_met_file.keys():
+        for key in parse_meta_file.keys():
             block = re.match(key, url)
             if block:
-                parse_meta = parse_met_file[key]
+                parse_meta = parse_meta_file[key]
                 print(parse_meta)
                 break # 찾으면 바로 break
+        # --------------------------------------
             
         with open(html_path, "r") as f:
             html = f.read()

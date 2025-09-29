@@ -108,9 +108,19 @@ if __name__ == "__main__":
     load_dotenv()
     
     import time
+    import json
+    with open(os.getenv("LOAD_META_FILE"), "r") as f:
+        load_meta_file = json.loads(f.read())
+        
+    with open(os.getenv("SAVE_META_FILE"), "r") as f:
+        save_meta_file = json.loads(f.read())
+        
     r = redis.Redis(host = os.getenv("REDIS_HOST"), port = os.getenv("REDIS_PORT"), db = 0)
+    # Fetcher
+    fetcher = Fetcher()
     
     try_count = 0
+    
     while True:
         item = r.lpop(os.getenv("REDIS_FRONTIER_QUEUE"))
         
@@ -130,17 +140,29 @@ if __name__ == "__main__":
         # URl information     
         url_id = example_url_info[0]
         url = example_url_info[1]
-        save_meta = {"save_path": "assets"}
         
-        # Fetcher
-        fetcher = Fetcher()
+        # --------------------------------------
+        import re
+        for key in load_meta_file.keys():
+            block = re.match(key, url)
+            if block:
+                load_meta = load_meta_file[key]
+                print(load_meta)
+                break # 찾으면 바로 break
+            
+        for key in save_meta_file.keys():
+            block = re.match(key, url)
+            if block:
+                save_meta = save_meta_file[key]
+                print(save_meta)
+                break # 찾으면 바로 break
+        # --------------------------------------
+        
         try:
-            fetcher.fetch(url_id, url, save_meta=save_meta)
+            fetcher.fetch(url_id, url, load_meta=load_meta, save_meta=save_meta)
         except KeyboardInterrupt:
             exit(1)
         except:
             import traceback
             traceback.print_exc()
-        
-        
         
