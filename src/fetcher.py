@@ -78,7 +78,7 @@ class Fetcher:
             responsed_at = datetime.now()
             responsed_date = responsed_at.strftime("%Y-%m-%d")
             timing = page.evaluate("() => performance.timing")
-            latency = (timing["responseEnd"] - timing["requestStart"])
+            latency = (timing["responseEnd"] - timing["requestStart"]) / 1000.0 # ms -> s
             http_response_status = response.status
             
             # TODO: requests와 crawl_status를 맞춰야 함. crawl_status가 200대만 true.
