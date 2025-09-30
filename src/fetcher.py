@@ -5,6 +5,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from datetime import datetime
+
+from playwright.sync_api import sync_playwright
 import requests
 import redis
 
@@ -19,6 +21,9 @@ class Fetcher:
         load_dotenv()
         self.conn = sqlite3.connect(os.getenv("CRAWLERS_DB_URL"))
         self.r = redis.Redis(host = os.getenv("REDIS_HOST"), port = os.getenv("REDIS_PORT"), db = 0)
+        
+        self.p = None
+        self.browser = None
     
     def fetch(self, 
               url_id: str, 
@@ -51,23 +56,48 @@ class Fetcher:
                 
                 # 종료
                 return
+            
+            # crawl history
+            responsed_at = datetime.now()
+            responsed_date = responsed_at.strftime("%Y-%m-%d")
+            latency = response.elapsed.total_seconds()
+            http_response_status = response.status_code
+            crawl_status = response.ok * 1
+            next_crawled_at = None
+            
+            html = response.text
+            
+        elif load_meta["mode"] == "browser":
+            if not self.p and not self.browser:
+                self.p = sync_playwright().start()
+                self.browser = self.p.chromium.launch(headless=True)
+            page = self.browser.new_page()
+            response = page.goto(url)
+            
+            # crawl history
+            responsed_at = datetime.now()
+            responsed_date = responsed_at.strftime("%Y-%m-%d")
+            timing = page.evaluate("() => performance.timing")
+            latency = (timing["responseEnd"] - timing["requestStart"])
+            http_response_status = response.status
+            
+            # TODO: requests와 crawl_status를 맞춰야 함. crawl_status가 200대만 true.
+            crawl_status = response.ok * 1
+            next_crawled_at = None
+            
+            html = page.content()
+            
+            page.close()
+            # browser.close()
         else:
             raise Exception("Not impletmented another mode : browser")
-        
-        # crawl history
-        responsed_at = datetime.now()
-        responsed_date = responsed_at.strftime("%Y-%m-%d")
-        latency = response.elapsed.total_seconds()
-        http_response_status = response.status_code
-        crawl_status = response.ok * 1
-        next_crawled_at = None
         
         # Save html
         save_path = f"{save_meta['save_path']}/{responsed_date}"
         file_name = f"{url_id}-{responsed_at.timestamp()}.html"
         if not Path(f"{save_path}").exists():
             Path(f"{save_path}").mkdir(parents=True, exist_ok=True)
-        Path(f"{save_path}/{file_name}").write_text(response.text)
+        Path(f"{save_path}/{file_name}").write_text(html)
         self.logger.info(f"Success file: {save_path}/{file_name}")
         
         # Save crawl history
