@@ -72,7 +72,26 @@ class Fetcher:
                 self.p = sync_playwright().start()
                 self.browser = self.p.chromium.launch(headless=True)
             page = self.browser.new_page()
-            response = page.goto(url)
+            
+            try:
+                response = page.goto(url)
+            except Exception:
+                self.logger.error(f"Failed to request urls {url}")
+                # status 업데이트
+                # TODO: 바로 failed로 바꾸는게 아니라 retry 이후 count
+                cur.execute(
+                    """
+                    UPDATE url_info SET status="failed" WHERE id=?
+                    """, 
+                    (url_id, )
+                )
+                # Close cursor
+                cur.close()
+                # Commit
+                self.conn.commit()
+                
+                # 종료
+                return
             
             # crawl history
             responsed_at = datetime.now()
