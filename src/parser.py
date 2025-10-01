@@ -40,6 +40,7 @@ class Parser:
         # Url 수집
         urls = [] 
         for href in hrefs:
+            # Uncapitalize url
             urls.append(urljoin(base_url, href).lower())
                 
         return urls
