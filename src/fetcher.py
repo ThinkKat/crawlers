@@ -158,15 +158,20 @@ if __name__ == "__main__":
     
     import time
     import json
-    with open(os.getenv("LOAD_META_FILE"), "r") as f:
-        load_meta_file = json.loads(f.read())
-        
-    with open(os.getenv("SAVE_META_FILE"), "r") as f:
-        save_meta_file = json.loads(f.read())
         
     r = redis.Redis(host = os.getenv("REDIS_HOST"), port = os.getenv("REDIS_PORT"), db = 0)
     # Fetcher
     fetcher = Fetcher()
+    
+    cur = fetcher.conn.cursor()
+    response = cur.execute("SELECT pattern, doc_json FROM meta_rule WHERE kind='load' ORDER BY priority DESC")
+    load_meta_rule = response.fetchall()
+    load_meta_rule = {rule[0]: json.loads(rule[1]) for rule in load_meta_rule}
+    
+    response = cur.execute("SELECT pattern, doc_json FROM meta_rule WHERE kind='save' ORDER BY priority DESC")
+    save_meta_rule = response.fetchall()
+    save_meta_rule = {rule[0]: json.loads(rule[1]) for rule in save_meta_rule}
+    cur.close()
     
     try_count = 0
     
@@ -192,17 +197,17 @@ if __name__ == "__main__":
         
         # --------------------------------------
         import re
-        for key in load_meta_file.keys():
+        for key in load_meta_rule.keys():
             block = re.match(key, url)
             if block:
-                load_meta = load_meta_file[key]
+                load_meta = load_meta_rule[key]
                 print(load_meta)
                 break # 찾으면 바로 break
             
-        for key in save_meta_file.keys():
+        for key in save_meta_rule.keys():
             block = re.match(key, url)
             if block:
-                save_meta = save_meta_file[key]
+                save_meta = save_meta_rule[key]
                 print(save_meta)
                 break # 찾으면 바로 break
         # --------------------------------------

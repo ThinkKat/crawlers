@@ -82,9 +82,14 @@ if __name__ == "__main__":
     import redis
     r = redis.Redis(host = os.getenv("REDIS_HOST"), port = os.getenv("REDIS_PORT"), db = 0)
     
-    with open(os.getenv("PARSE_META_FILE"), "r") as f:
-        parse_meta_file = json.loads(f.read())
+    
     parser = Parser()
+    
+    cur = parser.conn.cursor()
+    response = cur.execute("SELECT pattern, doc_json FROM meta_rule WHERE kind='parse' ORDER BY priority DESC")
+    parse_meta_rule = response.fetchall()
+    parse_meta_rule = {rule[0]: json.loads(rule[1]) for rule in parse_meta_rule}
+    cur.close()
     
     try_count = 0
     while True:
@@ -109,10 +114,10 @@ if __name__ == "__main__":
         
         # --------------------------------------
         import re
-        for key in parse_meta_file.keys():
+        for key in parse_meta_rule.keys():
             block = re.match(key, url)
             if block:
-                parse_meta = parse_meta_file[key]
+                parse_meta = parse_meta_rule[key]
                 print(parse_meta)
                 break # 찾으면 바로 break
         # --------------------------------------
